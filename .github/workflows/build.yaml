@@ -1,7 +1,6 @@
 name: Build Whl
 
 on:
-  pull_request:
   workflow_dispatch:
   schedule:
     - cron: '0 16 * * *'
@@ -61,8 +60,6 @@ jobs:
             cd mcore-bridge
             git config --global --add safe.directory /workspace/mcore-bridge
             git pull
-            git fetch origin pull/${{ github.event.pull_request.number }}/head:pr-${{ github.event.pull_request.number }}
-            git checkout pr-${{ github.event.pull_request.number }}
             git log --pretty=oneline -10
           '
       - name: Change python version
