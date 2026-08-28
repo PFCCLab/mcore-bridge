@@ -59,6 +59,7 @@ jobs:
             rm -rf mcore-bridge && tar zxf mcore-bridge.tar.gz && rm -rf mcore-bridge.tar.gz
             source $work_dir/../../../proxy
             cd mcore-bridge
+            git config --global --add safe.directory /workspace/mcore-bridge
             git pull
             git fetch origin pull/${{ github.event.pull_request.number }}/head:pr-${{ github.event.pull_request.number }}
             git checkout pr-${{ github.event.pull_request.number }}
