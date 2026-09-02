@@ -27,7 +27,9 @@ python -m pip config --user set global.trusted-host pypi.tuna.tsinghua.edu.cn
 bridge_tar (){
     cd /workspace
     # mcore-bridge.tar only include the main branch
-    if [ -n "$BRANCH" ] && [ "$BRANCH" = "main" ]; then
+    if [ -n "$TARGET_COMMIT" ]; then
+        echo "TARGET_COMMIT=$TARGET_COMMIT specified, skip refreshing mcore-bridge.tar.gz"
+    elif [ -n "$BRANCH" ] && [ "$BRANCH" = "main" ]; then
         echo "Checkout branch $BRANCH"
         tar -zcf mcore-bridge.tar.gz mcore-bridge/
         mv mcore-bridge.tar.gz ${upload_path}/
@@ -67,11 +69,16 @@ bridge_build (){
     new_name=$(echo $base_name | sed "s/\.dev0/&+${commit}/")
     echo "commit whl: $new_name"
     cp "$whl_file" "${upload_path}/${new_name}"
-    cp "$whl_file" "${upload_path}/${base_name}"
 
     zero_name=$(echo $base_name | sed "s/^mcore_bridge-[^-]*-/mcore_bridge-0.0.0-/")
-    echo "0.0.0 whl: $zero_name"
-    cp "$whl_file" "${upload_path}/${zero_name}"
+    if [ "${UPDATE_LATEST:-true}" = "true" ]; then
+        echo "latest whl: $base_name"
+        cp "$whl_file" "${upload_path}/${base_name}"
+        echo "0.0.0 whl: $zero_name"
+        cp "$whl_file" "${upload_path}/${zero_name}"
+    else
+        echo "UPDATE_LATEST=${UPDATE_LATEST}, skip latest whl: ${base_name} and 0.0.0 whl"
+    fi
 }
 
 # main

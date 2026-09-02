@@ -2,12 +2,25 @@ name: Build Whl
 
 on:
   workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit id to build (default: latest commit of the selected branch)'
+        required: false
+        type: string
+        default: ''
+      update_latest:
+        description: 'Update the latest whl (the original base name and 0.0.0)'
+        required: false
+        type: boolean
+        default: true
   schedule:
     - cron: '0 16 * * *'
 
 env:
   BRANCH: ${{ github.ref_name }}
-  COMMIT_ID: ${{ github.sha }}
+  COMMIT_ID: ${{ inputs.commit || github.sha }}
+  TARGET_COMMIT: ${{ inputs.commit }}
+  UPDATE_LATEST: ${{ github.event.inputs.update_latest || 'true' }}
   work_dir: ${{ github.workspace }}
   python_version: 3.12
   TASK: MCORE-BRIDGE-${{ github.sha }}-build
@@ -44,6 +57,8 @@ jobs:
             -v /home/.cache/pip:/home/.cache/pip \
             -e "BRANCH=$BRANCH" \
             -e "COMMIT_ID=$COMMIT_ID" \
+            -e "TARGET_COMMIT=$TARGET_COMMIT" \
+            -e "UPDATE_LATEST=$UPDATE_LATEST" \
             -e work_dir \
             -e no_proxy \
             -e CE_name \
@@ -60,6 +75,10 @@ jobs:
             cd mcore-bridge
             git config --global --add safe.directory /workspace/mcore-bridge
             git pull
+            if [ -n "$TARGET_COMMIT" ]; then
+              echo "Checkout specified commit $TARGET_COMMIT"
+              git checkout "$TARGET_COMMIT"
+            fi
             git log --pretty=oneline -10
           '
       - name: Change python version
