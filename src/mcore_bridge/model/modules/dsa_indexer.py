@@ -101,12 +101,18 @@ class DSAIndexer(McoreDSAIndexer):
         x_pe, x_nope = torch.split(
             x, [self.index_head_dim - self.qk_pos_emb_head_dim, self.qk_pos_emb_head_dim], dim=-1)
         origin_multi_latent_attention = self.config.multi_latent_attention
+        origin_rotary_interleaved = self.config.rotary_interleaved
+        use_align = getattr(self.config, 'use_accuracy_compatible', False)
         squeezed_batch_dim = False
         if cu_seqlens is not None and x_pe.ndim == 4 and x_pe.size(1) == 1:
             x_pe = x_pe.squeeze(1)
             squeezed_batch_dim = True
         try:
-            self.config.multi_latent_attention = self.config.dsa_indexer_rotary_interleaved
+            if use_align:
+                self.config.rotary_interleaved = self.config.dsa_indexer_rotary_interleaved
+                self.config.multi_latent_attention = False
+            else:
+                self.config.multi_latent_attention = self.config.dsa_indexer_rotary_interleaved
             x_pe = apply_rotary_pos_emb(
                 x_pe,
                 rotary_pos_emb,
@@ -116,6 +122,7 @@ class DSAIndexer(McoreDSAIndexer):
             )
         finally:
             self.config.multi_latent_attention = origin_multi_latent_attention
+            self.config.rotary_interleaved = origin_rotary_interleaved
         if squeezed_batch_dim:
             x_pe = x_pe.unsqueeze(1)
         # [seqlen, batch, *, index_head_dim]
