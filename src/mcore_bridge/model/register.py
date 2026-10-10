@@ -105,8 +105,12 @@ class ModelLoader:
         if self.config.qk_layernorm:
             linear_q_up_proj = backend.column_parallel_linear()
             # fix megatron-core
-            dsa_spec.submodules.q_layernorm = backend.layer_norm(for_qk=True)
-            dsa_spec.submodules.kv_layernorm = backend.layer_norm(for_qk=True)
+            if getattr(self.config, 'use_accuracy_compatible', False):
+                dsa_spec.submodules.q_layernorm = WrappedTorchNorm
+                dsa_spec.submodules.kv_layernorm = WrappedTorchNorm
+            else:
+                dsa_spec.submodules.q_layernorm = backend.layer_norm(for_qk=True)
+                dsa_spec.submodules.kv_layernorm = backend.layer_norm(for_qk=True)
             dsa_spec.submodules.linear_q_up_proj = linear_q_up_proj
             dsa_spec.submodules.linear_kv_up_proj = linear_q_up_proj
         layer_spec.submodules.self_attention = dsa_spec

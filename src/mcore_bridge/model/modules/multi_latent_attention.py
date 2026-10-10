@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn.functional as F
 from megatron.core import parallel_state, tensor_parallel
@@ -7,6 +8,31 @@ from megatron.core.tensor_parallel.mappings import (gather_from_sequence_paralle
                                                     scatter_to_sequence_parallel_region)
 from megatron.core.transformer.multi_latent_attention import MLASelfAttention as McoreMLASelfAttention
 from megatron.core.utils import deprecate_inference_params
+
+
+class _AlignedHeadExpand(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, x, num_heads, head_axis):
+        ctx.num_heads = int(num_heads)
+        ctx.head_axis = int(head_axis)
+        shape = [-1] * x.dim()
+        shape[ctx.head_axis] = ctx.num_heads
+        return x.expand(*shape)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        axis = ctx.head_axis
+        grad = grad_output.float()
+        acc = grad.narrow(axis, 0, 1)
+        for i in range(1, ctx.num_heads):
+            acc = acc + grad.narrow(axis, i, 1)
+        return acc.to(grad_output.dtype), None, None
+
+
+def _align_head_expand_enabled(config) -> bool:
+    return bool(getattr(config, 'dsa_accuracy_compatible', False)) or \
+        os.environ.get('USE_ACCURACY_COMPATIBLE', '0') == '1'
 
 
 class MLASelfAttention(McoreMLASelfAttention):
@@ -165,11 +191,18 @@ class MLASelfAttention(McoreMLASelfAttention):
             query = torch.cat([q_no_pe, q_pos_emb], dim=-1)
 
             # key: [num_tokens, n, (qk_head_dim + v_head_dim)]
+            _align_expand = _align_head_expand_enabled(self.config)
             if k_pos_emb.ndim == 4:
-                k_pos_emb = k_pos_emb.expand(-1, -1, self.num_attention_heads_per_partition, -1)
+                if _align_expand:
+                    k_pos_emb = _AlignedHeadExpand.apply(k_pos_emb, self.num_attention_heads_per_partition, 2)
+                else:
+                    k_pos_emb = k_pos_emb.expand(-1, -1, self.num_attention_heads_per_partition, -1)
             else:
                 assert k_pos_emb.ndim == 3
-                k_pos_emb = k_pos_emb.expand(-1, self.num_attention_heads_per_partition, -1)
+                if _align_expand:
+                    k_pos_emb = _AlignedHeadExpand.apply(k_pos_emb, self.num_attention_heads_per_partition, 1)
+                else:
+                    k_pos_emb = k_pos_emb.expand(-1, self.num_attention_heads_per_partition, -1)
             key = torch.cat([k_no_pe, k_pos_emb], dim=-1)
 
             query = query.contiguous()
